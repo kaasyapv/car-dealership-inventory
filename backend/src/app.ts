@@ -5,6 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { ZodError } from "zod";
 import { authRouter } from "./auth";
 import { HttpError } from "./http";
+import { vehicleRouter } from "./vehicles";
 
 export interface AppConfig {
   jwtSecret: string;
@@ -16,6 +17,7 @@ export function createApp(db: DatabaseSync, { jwtSecret }: AppConfig) {
   app.use(cors(), express.json());
 
   app.use("/api/auth", authRouter(db, jwtSecret));
+  app.use("/api/vehicles", vehicleRouter(db, jwtSecret));
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ZodError) {
