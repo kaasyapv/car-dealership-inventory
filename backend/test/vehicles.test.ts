@@ -182,3 +182,75 @@ describe("POST /api/vehicles/:id/restock", () => {
     expect((await request(app).post("/api/vehicles/999/restock").set(bearer(admin)).send({ amount: 1 })).status).toBe(404);
   });
 });
+
+describe("POST /api/vehicles/:id/purchase with a quantity", () => {
+  it("buys several units at once", async () => {
+    const { body } = await add(civic);
+    const res = await request(app).post(`/api/vehicles/${body.id}/purchase`).set(bearer(user)).send({ quantity: 2 });
+    expect(res.body.quantity).toBe(1);
+  });
+  it("refuses more than is in stock without changing it", async () => {
+    const { body } = await add(civic);
+    const res = await request(app).post(`/api/vehicles/${body.id}/purchase`).set(bearer(user)).send({ quantity: 4 });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("OUT_OF_STOCK");
+    expect((await request(app).get("/api/vehicles").set(bearer(user))).body[0].quantity).toBe(3);
+  });
+  it.each([[{ quantity: 0 }], [{ quantity: -1 }], [{ quantity: 1.5 }]])("rejects %j with 400", async (b) => {
+    const { body } = await add(civic);
+    expect((await request(app).post(`/api/vehicles/${body.id}/purchase`).set(bearer(user)).send(b)).status).toBe(400);
+  });
+});
+
+describe("concurrent purchases", () => {
+  it("never oversell: 20 simultaneous buyers of 5 cars get exactly 5", async () => {
+    const { body } = await add({ ...civic, quantity: 5 });
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () => request(app).post(`/api/vehicles/${body.id}/purchase`).set(bearer(user))),
+    );
+    expect(results.filter((r) => r.status === 200)).toHaveLength(5);
+    expect(results.filter((r) => r.status === 409)).toHaveLength(15);
+    expect((await request(app).get("/api/vehicles").set(bearer(user))).body[0].quantity).toBe(0);
+  });
+});
+
+describe("GET /api/inventory/events (audit trail)", () => {
+  const events = (token = admin, qs = "") => request(app).get(`/api/inventory/events${qs}`).set(bearer(token));
+
+  it("is admin only", async () => {
+    expect((await events(user)).status).toBe(403);
+    expect((await request(app).get("/api/inventory/events")).status).toBe(401);
+  });
+
+  it("records purchases and restocks newest first, with who and what", async () => {
+    const { body } = await add(civic);
+    await request(app).post(`/api/vehicles/${body.id}/purchase`).set(bearer(user)).send({ quantity: 2 });
+    await request(app).post(`/api/vehicles/${body.id}/restock`).set(bearer(admin)).send({ amount: 10 });
+    const res = await events();
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      expect.objectContaining({ kind: "restock", quantity: 10, vehicle: "Honda Civic", userEmail: "admin@x.com" }),
+      expect.objectContaining({ kind: "purchase", quantity: 2, vehicle: "Honda Civic", userEmail: "user@x.com", vehicleId: body.id }),
+    ]);
+    expect(res.body[0].at).toEqual(expect.any(String));
+  });
+
+  it("does not record a refused purchase", async () => {
+    const { body } = await add({ ...civic, quantity: 0 });
+    await request(app).post(`/api/vehicles/${body.id}/purchase`).set(bearer(user));
+    expect((await events()).body).toEqual([]);
+  });
+
+  it("keeps history after the vehicle is deleted", async () => {
+    const { body } = await add(civic);
+    await request(app).post(`/api/vehicles/${body.id}/purchase`).set(bearer(user));
+    await request(app).delete(`/api/vehicles/${body.id}`).set(bearer(admin));
+    expect((await events()).body[0]).toEqual(expect.objectContaining({ vehicle: "Honda Civic", vehicleId: null }));
+  });
+
+  it("honours ?limit", async () => {
+    const { body } = await add(civic);
+    for (let i = 0; i < 3; i++) await request(app).post(`/api/vehicles/${body.id}/purchase`).set(bearer(user));
+    expect((await events(admin, "?limit=2")).body).toHaveLength(2);
+  });
+});
