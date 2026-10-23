@@ -58,3 +58,10 @@ describe("POST /api/auth/login", () => {
     expect(wrong.body).toEqual(unknown.body);
   });
 });
+
+describe("malformed requests", () => {
+  it("answers invalid JSON with 400 instead of 500", async () => {
+    const res = await request(makeApp()).post("/api/auth/login").set("Content-Type", "application/json").send("{oops");
+    expect(res.status).toBe(400);
+  });
+});
