@@ -254,3 +254,52 @@ describe("GET /api/inventory/events (audit trail)", () => {
     expect((await events(admin, "?limit=2")).body).toHaveLength(2);
   });
 });
+
+describe("listing: availability, sorting and pagination", () => {
+  const cars = [
+    { make: "Audi", model: "A4", category: "Sedan", price: 40000, quantity: 2 },
+    { make: "BMW", model: "M3", category: "Sedan", price: 70000, quantity: 0 },
+    { make: "Chevy", model: "Bolt", category: "Hatch", price: 30000, quantity: 5 },
+    { make: "Dodge", model: "Ram", category: "Truck", price: 50000, quantity: 1 },
+    { make: "Fiat", model: "500", category: "Hatch", price: 20000, quantity: 9 },
+  ];
+  const list = (path: string) => request(app).get(path).set(bearer(user));
+  const models = (res: { body: { model: string }[] }) => res.body.map((v) => v.model);
+
+  beforeEach(async () => {
+    for (const c of cars) await add(c);
+  });
+
+  it.each(["/api/vehicles", "/api/vehicles/search"])("%s?available=true hides sold-out vehicles", async (path) => {
+    expect(models(await list(`${path}?available=true`))).toEqual(["A4", "Bolt", "Ram", "500"]);
+  });
+
+  it("sorts by price ascending or descending", async () => {
+    expect(models(await list("/api/vehicles?sort=price"))).toEqual(["500", "Bolt", "A4", "Ram", "M3"]);
+    expect(models(await list("/api/vehicles?sort=price&order=desc"))).toEqual(["M3", "Ram", "A4", "Bolt", "500"]);
+  });
+
+  it("paginates with limit and offset and reports the total in X-Total-Count", async () => {
+    const res = await list("/api/vehicles?limit=2&offset=2");
+    expect(models(res)).toEqual(["Bolt", "Ram"]);
+    expect(res.headers["x-total-count"]).toBe("5");
+  });
+
+  it("reports the filtered total, not the page size", async () => {
+    const res = await list("/api/vehicles/search?category=hatch&limit=1");
+    expect(models(res)).toEqual(["Bolt"]);
+    expect(res.headers["x-total-count"]).toBe("2");
+  });
+
+  it.each(["sort=nope", "order=sideways", "limit=0", "limit=101", "offset=-1", "available=maybe"])(
+    "rejects %s with 400",
+    async (qs) => {
+      expect((await list(`/api/vehicles?${qs}`)).status).toBe(400);
+    },
+  );
+
+  it("does not let sort become SQL", async () => {
+    expect((await list("/api/vehicles?sort=price;DROP TABLE vehicles")).status).toBe(400);
+    expect((await list("/api/vehicles")).body).toHaveLength(5);
+  });
+});
