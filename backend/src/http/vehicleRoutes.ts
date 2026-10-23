@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { VEHICLE_SORTS } from "../domain";
 import type { InventoryService } from "../services/inventoryService";
 import { requireAdmin } from "./middleware";
 
@@ -19,6 +20,11 @@ const searchQuery = z.object({
   category: z.string().optional(),
   minPrice: z.coerce.number().min(0).optional(),
   maxPrice: z.coerce.number().min(0).optional(),
+  available: z.enum(["true", "false"]).optional().transform((v) => v === "true"),
+  sort: z.enum(VEHICLE_SORTS).optional(),
+  order: z.enum(["asc", "desc"]).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 const parseId = (raw: unknown) => z.coerce.number().int().positive().parse(raw);
 
@@ -26,13 +32,11 @@ const parseId = (raw: unknown) => z.coerce.number().int().positive().parse(raw);
 export function vehicleRoutes(inventory: InventoryService): Router {
   const router = Router();
 
-  router.get("/", (_req, res) => {
-    res.json(inventory.search().items);
-  });
-
-  // Declared before "/:id" routes so "search" is not parsed as an id.
-  router.get("/search", (req, res) => {
-    res.json(inventory.search(searchQuery.parse(req.query)).items);
+  // "/" and "/search" are the same query; the total goes in a header so the body stays a plain array.
+  // "/search" is declared before "/:id" routes so it is not parsed as an id.
+  router.get(["/", "/search"], (req, res) => {
+    const { items, total } = inventory.search(searchQuery.parse(req.query));
+    res.set("X-Total-Count", String(total)).json(items);
   });
 
   router.post("/", requireAdmin, (req, res) => {

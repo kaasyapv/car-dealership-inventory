@@ -24,7 +24,16 @@ export interface VehicleQuery {
   category?: string;
   minPrice?: number;
   maxPrice?: number;
+  /** Only vehicles with stock left. */
+  available?: boolean;
+  sort?: VehicleSort;
+  order?: "asc" | "desc";
+  limit?: number;
+  offset?: number;
 }
+
+export const VEHICLE_SORTS = ["id", "make", "model", "category", "price", "quantity"] as const;
+export type VehicleSort = (typeof VEHICLE_SORTS)[number];
 
 /** Everything the API can deliberately refuse to do; the HTTP layer maps each code to a status. */
 export type ErrorCode =

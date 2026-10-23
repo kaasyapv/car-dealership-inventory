@@ -25,7 +25,7 @@ export function createApp(db: DatabaseSync, { jwtSecret, bcryptRounds }: AppConf
   const inventory = new InventoryService(vehicleRepo, vehicleRepo);
 
   const app = express();
-  app.use(cors(), express.json());
+  app.use(cors({ exposedHeaders: ["X-Total-Count"] }), express.json());
   app.use("/api/auth", authRoutes(auth));
   app.use("/api/vehicles", requireAuth(auth), vehicleRoutes(inventory));
   app.use("/api/inventory", requireAuth(auth), requireAdmin, inventoryRoutes(inventory));

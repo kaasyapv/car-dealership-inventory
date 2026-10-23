@@ -18,9 +18,15 @@ export class SqliteVehicleRepository implements VehicleRepository, StockLedger {
     }
     if (q.minPrice !== undefined) (clauses.push("price >= ?"), params.push(q.minPrice));
     if (q.maxPrice !== undefined) (clauses.push("price <= ?"), params.push(q.maxPrice));
+    if (q.available) clauses.push("quantity > 0");
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-    const items = this.db.prepare(`SELECT * FROM vehicles ${where} ORDER BY id`).all(...params) as unknown as Vehicle[];
-    return { items, total: items.length };
+    // sort/order come from closed enums validated at the edge; id is the tie-breaker for stable pages.
+    const order = `ORDER BY ${q.sort ?? "id"} ${q.order === "desc" ? "DESC" : "ASC"}, id`;
+    const items = this.db
+      .prepare(`SELECT * FROM vehicles ${where} ${order} LIMIT ? OFFSET ?`)
+      .all(...params, q.limit ?? -1, q.offset ?? 0) as unknown as Vehicle[];
+    const { total } = this.db.prepare(`SELECT COUNT(*) AS total FROM vehicles ${where}`).get(...params) as { total: number };
+    return { items, total };
   }
 
   find(id: number) {
