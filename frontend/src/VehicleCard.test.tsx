@@ -6,8 +6,8 @@ import VehicleCard from './VehicleCard'
 
 const civic: Vehicle = { id: 1, make: 'Honda', model: 'Civic', category: 'Sedan', price: 22000, quantity: 3 }
 const noop = () => {}
-const setup = (v: Vehicle, isAdmin = false, handlers = {}) =>
-  render(<VehicleCard vehicle={v} isAdmin={isAdmin} onPurchase={noop} onRestock={noop} onEdit={noop} onDelete={noop} {...handlers} />)
+const setup = (v: Vehicle, isAdmin = false, handlers: object = {}) =>
+  render(<VehicleCard vehicle={v} isAdmin={isAdmin} busy={false} onPurchase={noop} onRestock={noop} onEdit={noop} onDelete={noop} {...handlers} />)
 
 describe('VehicleCard', () => {
   it('shows the vehicle details', () => {
@@ -47,5 +47,15 @@ describe('VehicleCard', () => {
     expect(onEdit).toHaveBeenCalledWith(civic)
     expect(onDelete).toHaveBeenCalledWith(civic)
     expect(onRestock).toHaveBeenCalledWith(civic)
+  })
+
+  it('warns when stock is low', () => {
+    setup({ ...civic, quantity: 2 })
+    expect(screen.getByText('Only 2 left')).toBeInTheDocument()
+  })
+
+  it('disables Purchase while a request is in flight so a double click cannot buy twice', () => {
+    render(<VehicleCard vehicle={civic} isAdmin={false} busy onPurchase={noop} onRestock={noop} onEdit={noop} onDelete={noop} />)
+    expect(screen.getByRole('button', { name: 'Purchase' })).toBeDisabled()
   })
 })
