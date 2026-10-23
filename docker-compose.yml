@@ -1,0 +1,16 @@
+# docker compose up --build  ->  http://localhost:8080
+services:
+  api:
+    build: ./backend
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (32+ chars), e.g. JWT_SECRET=$(openssl rand -hex 32) docker compose up}
+    volumes:
+      - dealership-data:/data
+  web:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+volumes:
+  dealership-data:

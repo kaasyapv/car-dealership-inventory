@@ -1,116 +1,151 @@
 # Showroom: Car Dealership Inventory System
 
-A full-stack inventory app for a car dealership, built test-first as a TDD kata.
+A full-stack inventory app for a car dealership, built test-first as a TDD kata. Customers browse, search and buy; admins manage the catalogue and see exactly who bought or restocked what.
 
-- **Backend:** Node.js + TypeScript, Express 5, SQLite (Node's built-in `node:sqlite`, file-backed), JWT auth, Zod validation.
-- **Frontend:** React + TypeScript (Vite), Tailwind CSS v4, responsive SPA.
-- **Tests:** Vitest + Supertest (API), Vitest + Testing Library (UI). 76 tests, all green.
+**Stack:** Node.js + TypeScript, Express 5, SQLite (file-backed), JWT, Zod · React 19 + TypeScript, Vite, Tailwind CSS v4 · Vitest, Supertest, Testing Library, Playwright.
 
-## Features
-
-| Area | What it does |
+| | |
 | --- | --- |
-| Auth | Register / log in, bcrypt-hashed passwords, 8h JWTs. **The first registered user becomes `admin`**; everyone after is a `user`. |
-| Browse | Dashboard of all vehicles with live stock. |
-| Search | Filter by make, model, category, and min/max price (combinable). |
-| Purchase | Any user; the button is disabled at zero stock. The API decrements atomically (never negative, `409` when sold out). |
-| Admin | Add, edit, delete vehicles and restock (+5 in the UI, any amount via the API). |
+| ![Admin dashboard](docs/screenshots/04-dashboard-admin.png) | ![Activity](docs/screenshots/06-activity.png) |
+
+## What the brief asked for, and where it lives
+
+| Requirement | Where / how |
+| --- | --- |
+| Register + login, JWT-protected routes | `backend/src/services/authService.ts`, `http/middleware.ts` |
+| `POST/GET/PUT/DELETE /api/vehicles`, `GET /search` | `backend/src/http/vehicleRoutes.ts` |
+| `purchase` (decrease) and `restock` (increase, admin) | `services/inventoryService.ts`, atomic SQL in `repositories/sqliteVehicleRepository.ts` |
+| Admin-only: delete, restock, **and add/update** | The brief's UI section gives admins add/update/delete, so the API enforces it too (see "A bug I caught" below) |
+| Real database (not in-memory) | SQLite file via Node's built-in `node:sqlite` ([ADR 1](docs/adr/0001-sqlite-via-node-builtin.md)) |
+| React SPA, Tailwind, search/filter, disabled Purchase at 0, admin forms | `frontend/src/` |
+| Responsive and creative design | see screenshots; mobile layout included |
+| TDD with a visible Red → Green → Refactor history | see [TDD history](#tdd-history) |
+| SOLID, clean code | [ADR 2](docs/adr/0002-layers-and-ports.md) |
+| README, screenshots, test report, "My AI Usage", `PROMPTS.md` | here |
+
+### Beyond the brief (deliberate extras)
+
+- **Audit trail.** Every purchase/restock is recorded in the same transaction as the stock change (who, what, how many, when). History survives deleting a vehicle. Admin "Activity" panel + `GET /api/inventory/events`.
+- **Never oversells.** One conditional `UPDATE … WHERE quantity + ? >= 0`; a test fires 20 simultaneous buyers at 5 cars ([ADR 4](docs/adr/0004-atomic-stock-and-audit-trail.md)).
+- **Search that scales.** Sort, in-stock filter, pagination (`limit`/`offset`, total in `X-Total-Count`), `LIKE` wildcards escaped, sort column from a closed enum.
+- **Filters live in the URL** (`/?category=SUV&available=1&sort=price:asc`): shareable, refresh-proof, debounced.
+- **Security hygiene.** bcrypt, startup-validated config, rate-limited auth, helmet, same error and same timing for unknown email vs wrong password ([ADR 5](docs/adr/0005-security-and-error-contract.md)).
+- **Living API docs.** OpenAPI at `/api/openapi.json`, Swagger UI at `/api/docs`; a contract test fails if a documented route doesn't exist.
+- **UX craft.** Loading skeletons, toasts (errors announced via `role="alert"`), in-app confirm dialog focused on *Cancel*, Escape closes modals, double-click-proof buttons, low-stock warnings, empty/error states with retry.
+- **Delivery.** `npm run seed`, GitHub Actions CI (typecheck + unit + coverage + Playwright), Dockerfiles + compose.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  UI[React SPA] -->|JSON + Bearer JWT| HTTP
+  subgraph API [Express API]
+    HTTP[http/ validate + delegate] --> SVC[services/ business rules]
+    SVC -->|ports| REPO[repositories/ SQLite]
+  end
+  REPO --> DB[(SQLite file)]
+  SVC -.unit-tested with.-> FAKES[in-memory fakes]
+```
+
+`domain.ts` holds the types, `DomainError` codes and the interfaces the services depend on; `app.ts` is the only place that picks concrete implementations. Six short [decision records](docs/adr/) explain the non-obvious choices.
+
+## Run it
+
+Requires **Node 22.5+** (developed on Node 26) for the built-in `node:sqlite`.
+
+```bash
+npm run install:all          # backend, frontend and e2e dependencies
+
+# terminal 1: API on :4000 (creates dealership.db)
+npm run dev:api
+# optional demo data: 16 vehicles + admin@showroom.dev / shopper@showroom.dev (password123)
+npm run seed
+
+# terminal 2: web on :5173 (proxies /api to :4000)
+npm run dev:web
+```
+
+Open http://localhost:5173. **The first account you register becomes the admin** ([ADR 3](docs/adr/0003-first-user-is-admin.md)), or use the seeded `admin@showroom.dev`. API docs: http://localhost:4000/api/docs.
+
+Backend env (all optional in dev): `PORT` (4000), `DB_PATH` (`dealership.db`), `CORS_ORIGIN` (`*`), `JWT_SECRET` (**required, 32+ chars, when `NODE_ENV=production`**).
+
+**Docker** (`docker-compose.yml` + two Dockerfiles): written but **not built or run by me**. The Docker daemon wasn't available on my machine, so treat it as untested.
 
 ## API
 
-All `/api/vehicles*` routes need `Authorization: Bearer <token>`.
+All `/api/vehicles*` and `/api/inventory*` routes need `Authorization: Bearer <token>`. Errors are `{ "error": "...", "code": "OUT_OF_STOCK" }`. Full schema: Swagger UI.
 
 | Method | Route | Access | Notes |
 | --- | --- | --- | --- |
-| POST | `/api/auth/register` | public | `{email, password(8+)}` → `{token, user}`; `409` on duplicate email |
-| POST | `/api/auth/login` | public | same response; identical `401` for unknown email / wrong password |
-| POST | `/api/vehicles` | user | `{make, model, category, price, quantity}` |
-| GET | `/api/vehicles` | user | list all |
-| GET | `/api/vehicles/search` | user | `?make=&model=&category=&minPrice=&maxPrice=` (case-insensitive, partial match) |
-| PUT | `/api/vehicles/:id` | user | partial update |
-| DELETE | `/api/vehicles/:id` | **admin** | `204` |
-| POST | `/api/vehicles/:id/purchase` | user | quantity − 1, `409` if out of stock |
-| POST | `/api/vehicles/:id/restock` | **admin** | `{amount}` positive integer |
-
-## Run locally
-
-Requires **Node 22.5+** (uses the built-in `node:sqlite`; developed on Node 26).
-
-```bash
-# terminal 1: API on :4000
-cd backend
-npm install
-npm run dev            # creates dealership.db on first run
-
-# terminal 2: web on :5173 (proxies /api to :4000)
-cd frontend
-npm install
-npm run dev
-```
-
-Open http://localhost:5173 and register. The first account is the admin.
-
-Environment variables (backend, all optional in dev): `PORT` (4000), `DB_PATH` (`dealership.db`), `JWT_SECRET` (**required** when `NODE_ENV=production`).
+| POST | `/api/auth/register` | public | `{email, password}` → `{token, user}`; `409` duplicate |
+| POST | `/api/auth/login` | public | identical `401` for unknown email / wrong password; `429` when rate limited |
+| GET | `/api/vehicles` · `/api/vehicles/search` | user | `make model category minPrice maxPrice available sort order limit offset` |
+| POST | `/api/vehicles` | **admin** | `{make, model, category, price, quantity}` |
+| PUT | `/api/vehicles/:id` | **admin** | partial update |
+| DELETE | `/api/vehicles/:id` | **admin** | `204`; sales history is kept |
+| POST | `/api/vehicles/:id/purchase` | user | optional `{quantity}` (default 1); `409 OUT_OF_STOCK` |
+| POST | `/api/vehicles/:id/restock` | **admin** | `{amount}` |
+| GET | `/api/inventory/events` | **admin** | audit trail, newest first |
+| GET | `/api/health` | public | liveness + DB check |
 
 ## Tests
 
 ```bash
-cd backend  && npm test            # or: npm run test:coverage
-cd frontend && npm test            # or: npm run test:coverage
+npm test            # backend + frontend unit/integration
+npm run test:e2e    # Playwright in real Chrome against the real API and a throwaway DB
+npm run test:all    # typecheck + everything
 ```
 
 ### Test report
 
-| Suite | Files | Tests | Statements | Branches | Functions | Lines |
-| --- | --- | --- | --- | --- | --- | --- |
-| Backend (API) | 2 | 48 ✅ | 98.3% | 93.8% | 100% | 98.2% |
-| Frontend (UI) | 5 | 28 ✅ | 93.2% | 86.5% | 84.7% | 93.5% |
+| Suite | Tests | Statements | Branches | Functions | Lines |
+| --- | --- | --- | --- | --- | --- |
+| Backend: service units + API (Supertest, real SQLite) | **113** ✅ | 95.1% | 90.3% | 100% | 95.5% |
+| Frontend: components + client (Testing Library) | **45** ✅ | 93.9% | 89.6% | 86.8% | 96.3% |
+| End-to-end (Playwright, Chrome) | **5** ✅ | n/a | n/a | n/a | n/a |
 
-Raw output: [`docs/test-report-backend.txt`](docs/test-report-backend.txt), [`docs/test-report-frontend.txt`](docs/test-report-frontend.txt).
-API tests run against an isolated in-memory SQLite database per test for speed; the running app always uses a file-backed database.
+Raw output: [backend](docs/test-report-backend.txt) · [frontend](docs/test-report-frontend.txt) · [e2e](docs/test-report-e2e.txt). The uncovered lines are mostly defensive branches (toast dismiss, load-more failure, the seed CLI guard). API tests use an isolated in-memory SQLite per test for speed; the running app always uses a file.
 
 ### TDD history
 
-The git log follows Red → Green: each `test(red): …` commit adds failing specs, and the next `feat:` / `fix:` commit makes them pass.
+Each `test(red)` commit adds specs that I ran and watched fail; the next commit makes them pass; `refactor` changes structure with the suite untouched.
 
 ```
-chore: scaffold backend
-test(red): auth register/login behaviour          → feat: implement register/login (green)
-test(red): vehicle CRUD, search, purchase, restock → feat: implement vehicle routes (green)
-test(red): malformed JSON body should be a 400    → fix: map malformed JSON body to 400 (green)
-test(red): frontend specs (card, auth, dashboard) → feat: implement React UI (green)
+test(red):  auth register/login               → feat: JWT auth + SQLite (green)
+test(red):  vehicle CRUD, search, purchase    → feat: vehicle routes (green)
+test(red):  malformed JSON is a 400           → fix: map to 400 (green)
+test(red):  only admins add/update vehicles   → fix: require admin (green)        ← bug found in review
+test(red):  service-level specs + fakes       → refactor: layers and ports        ← the Refactor step
+test(red):  multi-unit buy, concurrency, audit→ feat: transactional audit trail (green)
+test(red):  availability, sort, pagination    → feat: listing features (green)
+test(red):  config, health, headers, limits   → feat: hardening (green)
+test(red):  OpenAPI contract, seed            → feat: docs + seed (green)
+test(red):  frontend UX specs                 → feat: debounce, URL filters, toasts… (green)
 ```
 
-## Design decisions
+(`git log --oneline` shows the real sequence.)
 
-- **Dependency injection for the DB** (`createApp(db, config)`): tests get an isolated database; the server wires the real file.
-- **Atomic purchase:** one conditional `UPDATE … WHERE quantity > 0`, so concurrent purchases cannot oversell.
-- **Search safety:** parameterised SQL with `%`/`_` escaped, so user input is matched literally.
-- **No account enumeration:** login returns the same `401` for unknown email and wrong password.
-- **Roles from the server only:** a client can never choose its own role at registration.
-- Known simplifications: no refresh tokens, no search debounce, no pagination (fine for a dealership-sized catalogue).
+## Things I deliberately did not build
 
-## Screenshots
-
-| | |
-| --- | --- |
-| ![Login](docs/screenshots/01-login.png) | ![User dashboard](docs/screenshots/02-dashboard-user.png) |
-| ![Search](docs/screenshots/03-search.png) | ![Admin dashboard](docs/screenshots/04-dashboard-admin.png) |
-| ![Add vehicle](docs/screenshots/05-add-vehicle.png) | ![Mobile](docs/screenshots/06-mobile.png) |
+Refresh tokens/revocation, password reset, a promote-to-admin screen, an ORM, GraphQL, a DI container, caching, a Redis-backed rate limiter, optimistic UI updates, payments. Each is a real feature for a real product; none earns its complexity in this scope, and the ADRs say where each would plug in.
 
 ## My AI Usage
 
-**Tool:** Claude Code (Anthropic's CLI agent, model Claude Sonnet 5.5). Every commit that involved it carries a `Co-Authored-By` trailer.
+**Tool:** Claude Code (Anthropic's CLI agent, Claude Sonnet 5.5). Every AI-assisted commit has a `Co-Authored-By` trailer. The full prompts are in [PROMPTS.md](PROMPTS.md).
 
 **How I used it**
 
-- Scaffolding: project setup, TypeScript/Vitest/Tailwind configuration, the Vite API proxy.
-- Test design: enumerating edge cases (auth, validation, 403/404/409, negative stock, SQL wildcard input) and drafting the specs **before** the implementation, then confirming each suite failed (red) before implementing (green).
-- Implementation: Express routers/middleware and the React components with Tailwind styling, then review of the generated code (atomic purchase, LIKE escaping, stale-response guard in search, role-gated UI).
-- Screenshots: scripted with headless Chrome against a seeded demo database.
+- **Test-first pairing.** I used it to enumerate edge cases (negative stock, SQL wildcard input, refused purchases not being logged, history surviving deletes), wrote them as failing specs first, and only then let it implement. A failing run was the gate before every implementation.
+- **Design decisions were mine; typing was shared.** I chose the port boundaries, first-user-is-admin, the audit-trail model and what *not* to build. AI did the mechanical moves (the refactor into layers) and drafted components and Tailwind markup.
+- **AI as a skeptical reviewer.** After the first working version I asked it to critique the UI like a senior reviewer; the list (no loading state, `window.confirm`, a request per keystroke, filters lost on refresh, double-click buys twice) became the frontend specs.
+- **Tooling.** Scaffolding configs, Playwright setup, and a headless-Chrome script for the screenshots.
 
-**Reflection**
+**Where it was wrong, and how I caught it** (all real, all in the history)
 
-AI was fastest at boilerplate and at brainstorming edge cases I would otherwise have found late. The red/green discipline kept the generated code honest: a failing test first meant every generated function had a stated purpose. What still needed a human was judgement: deciding the first-user-is-admin rule, insisting on identical login errors, and checking that the purchase path could not oversell. I treated its output as a draft to read critically rather than something to accept wholesale.
+1. The first generated router let *any* logged-in user add and edit vehicles, so a shopper could reprice a car. Only delete/restock were admin-gated, because those were the only ones the brief labelled "Admin only". Re-reading the brief's UI section showed add/update are admin features too. I wrote the failing test first, then fixed it.
+2. It put a feature implementation into a commit labelled as a red test. I rewrote the local history so the red/green sequence is honest.
+3. One of its UI specs asserted two contradictory low-stock thresholds. I noticed when the green run failed and fixed the spec, not the code.
+4. The first end-to-end run failed on ambiguous button names ("Register" also matched "Already registered? Log in"). That's a real accessibility smell, so I made the selectors exact.
+5. It wrote Docker files I could not run. I say so above instead of claiming they work.
 
-Full prompts are in [PROMPTS.md](PROMPTS.md).
+**Reflection.** AI was strongest at breadth: edge-case lists, boilerplate, mechanical refactors, and a second pair of eyes. It was weakest at reading intent: it implemented what the brief literally labelled rather than what it implied (the admin gap), and it happily produced plausible-looking structure with no one asking "does this have to exist?". The workflow that worked was tests as the contract, small commits, and treating every generated diff as a pull request from a fast junior: read it, run it, and distrust the confident parts. The red/green discipline also made AI's mistakes cheap to find, because a wrong assumption shows up as a failing test rather than a production bug.

@@ -1,0 +1,14 @@
+{
+  "name": "car-dealership-inventory",
+  "private": true,
+  "scripts": {
+    "install:all": "npm ci --prefix backend && npm ci --prefix frontend && npm ci --prefix e2e",
+    "dev:api": "npm run dev --prefix backend",
+    "dev:web": "npm run dev --prefix frontend",
+    "seed": "npm run seed --prefix backend",
+    "typecheck": "npm run typecheck --prefix backend && npx --prefix frontend tsc -b frontend",
+    "test": "npm test --prefix backend && npm test --prefix frontend",
+    "test:e2e": "npm test --prefix e2e",
+    "test:all": "npm run typecheck && npm test && npm run test:e2e"
+  }
+}

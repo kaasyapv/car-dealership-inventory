@@ -1,0 +1,10 @@
+
+Running 5 tests using 1 worker
+
+  ✓  1 tests/dealership.spec.ts:25:7 › dealership journey › the first account is the admin and can add vehicles (1.3s)
+  ✓  2 tests/dealership.spec.ts:45:7 › dealership journey › a shopper cannot see admin tools, can search, and buying the last car sells it out (2.6s)
+  ✓  3 tests/dealership.spec.ts:65:7 › dealership journey › the admin sees the sale in the audit trail and can restock and delete (998ms)
+  ✓  4 tests/dealership.spec.ts:81:7 › dealership journey › sessions survive a reload and logging out returns to the login form (932ms)
+  ✓  5 tests/dealership.spec.ts:89:7 › dealership journey › wrong credentials show an error and a bad API route is never reachable without a token (942ms)
+
+  5 passed (9.7s)
