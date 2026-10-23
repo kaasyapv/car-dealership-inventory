@@ -1,0 +1,63 @@
+/** Core types, business errors and the ports (interfaces) the services depend on. No I/O in here. */
+
+export type Role = "admin" | "user";
+
+export interface User {
+  id: number;
+  email: string;
+  role: Role;
+}
+
+export interface Vehicle {
+  id: number;
+  make: string;
+  model: string;
+  category: string;
+  price: number;
+  quantity: number;
+}
+export type VehicleInput = Omit<Vehicle, "id">;
+
+export interface VehicleQuery {
+  make?: string;
+  model?: string;
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+}
+
+/** Everything the API can deliberately refuse to do; the HTTP layer maps each code to a status. */
+export type ErrorCode =
+  | "NOT_FOUND"
+  | "OUT_OF_STOCK"
+  | "EMAIL_TAKEN"
+  | "INVALID_CREDENTIALS"
+  | "UNAUTHENTICATED"
+  | "FORBIDDEN";
+
+export class DomainError extends Error {
+  constructor(
+    public readonly code: ErrorCode,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/** Port: persistence of vehicles. Implemented by SQLite in production and by a fake in unit tests. */
+export interface VehicleRepository {
+  search(query: VehicleQuery): { items: Vehicle[]; total: number };
+  find(id: number): Vehicle | undefined;
+  insert(input: VehicleInput): Vehicle;
+  update(id: number, input: VehicleInput): Vehicle | undefined;
+  remove(id: number): boolean;
+  /** Atomically adds `delta` to stock. Returns undefined if the vehicle is missing or stock would go negative. */
+  adjustStock(id: number, delta: number): Vehicle | undefined;
+}
+
+/** Port: persistence of users. */
+export interface UserRepository {
+  /** Creates a user; the very first one becomes admin. Returns undefined if the email is taken. */
+  create(email: string, passwordHash: string): User | undefined;
+  findByEmail(email: string): (User & { passwordHash: string }) | undefined;
+}

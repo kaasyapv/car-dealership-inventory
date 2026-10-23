@@ -1,36 +1,31 @@
 import cors from "cors";
-import type { NextFunction, Request, Response } from "express";
 import express from "express";
 import type { DatabaseSync } from "node:sqlite";
-import { ZodError } from "zod";
-import { authRouter } from "./auth";
-import { HttpError } from "./http";
-import { vehicleRouter } from "./vehicles";
+import { errorHandler } from "./http/errorHandler";
+import { authRoutes } from "./http/authRoutes";
+import { requireAuth } from "./http/middleware";
+import { vehicleRoutes } from "./http/vehicleRoutes";
+import { SqliteUserRepository } from "./repositories/sqliteUserRepository";
+import { SqliteVehicleRepository } from "./repositories/sqliteVehicleRepository";
+import { BcryptHasher, JwtTokens } from "./security";
+import { AuthService } from "./services/authService";
+import { InventoryService } from "./services/inventoryService";
 
 export interface AppConfig {
   jwtSecret: string;
+  /** bcrypt cost; tests lower it for speed. */
+  bcryptRounds?: number;
 }
 
-/** Builds the Express app. The database is injected so tests can use an isolated one. */
-export function createApp(db: DatabaseSync, { jwtSecret }: AppConfig) {
+/** Composition root: the only place that knows which concrete classes implement each port. */
+export function createApp(db: DatabaseSync, { jwtSecret, bcryptRounds }: AppConfig) {
+  const auth = new AuthService(new SqliteUserRepository(db), new BcryptHasher(bcryptRounds), new JwtTokens(jwtSecret));
+  const inventory = new InventoryService(new SqliteVehicleRepository(db));
+
   const app = express();
   app.use(cors(), express.json());
-
-  app.use("/api/auth", authRouter(db, jwtSecret));
-  app.use("/api/vehicles", vehicleRouter(db, jwtSecret));
-
-  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    if (err instanceof ZodError) {
-      res.status(400).json({ error: "Validation failed", details: err.issues });
-    } else if ((err as { type?: string }).type === "entity.parse.failed") {
-      res.status(400).json({ error: "Malformed JSON body" });
-    } else if (err instanceof HttpError) {
-      res.status(err.status).json({ error: err.message });
-    } else {
-      console.error(err);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
+  app.use("/api/auth", authRoutes(auth));
+  app.use("/api/vehicles", requireAuth(auth), vehicleRoutes(inventory));
+  app.use(errorHandler);
   return app;
 }

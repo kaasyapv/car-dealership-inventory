@@ -4,7 +4,7 @@ import { openDb } from "../src/db";
 
 /** Fresh app backed by an isolated SQLite database per test (":memory:" is test-only). */
 export function makeApp() {
-  return createApp(openDb(":memory:"), { jwtSecret: "test-secret" });
+  return createApp(openDb(":memory:"), { jwtSecret: "test-secret", bcryptRounds: 4 });
 }
 
 type App = ReturnType<typeof makeApp>;
