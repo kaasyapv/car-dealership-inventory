@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Modal from './Modal'
 import type { Vehicle, VehicleInput } from './types'
 
 interface Props {
@@ -32,13 +33,13 @@ export default function VehicleForm({ vehicle, onSave, onCancel }: Props) {
   }
 
   return (
-    <div role="dialog" aria-label={vehicle ? 'Edit vehicle' : 'Add vehicle'} className="fixed inset-0 z-20 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <form onSubmit={submit} className="w-full max-w-md space-y-4 rounded-3xl bg-white p-7 shadow-2xl">
+    <Modal label={vehicle ? 'Edit vehicle' : 'Add vehicle'} onClose={onCancel}>
+      <form onSubmit={submit} className="space-y-4 p-7">
         <h2 className="text-xl font-bold text-slate-900">{vehicle ? 'Edit vehicle' : 'Add a vehicle'}</h2>
         <div className="grid grid-cols-2 gap-4">
           <label className="text-sm font-medium text-slate-700">
             Make
-            <input required value={values.make} onChange={set('make')} className={field} />
+            <input autoFocus required value={values.make} onChange={set('make')} className={field} />
           </label>
           <label className="text-sm font-medium text-slate-700">
             Model
@@ -67,6 +68,6 @@ export default function VehicleForm({ vehicle, onSave, onCancel }: Props) {
           <button className="rounded-xl bg-indigo-600 px-5 py-2 font-semibold text-white hover:bg-indigo-700">Save</button>
         </div>
       </form>
-    </div>
+    </Modal>
   )
 }

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Vehicle } from './types'
 import VehicleCard from './VehicleCard'
 
-const civic: Vehicle = { id: 1, make: 'Honda', model: 'Civic', category: 'Sedan', price: 22000, quantity: 3 }
+const civic: Vehicle = { id: 1, make: 'Honda', model: 'Civic', category: 'Sedan', price: 22000, quantity: 8 }
 const noop = () => {}
 const setup = (v: Vehicle, isAdmin = false, handlers: object = {}) =>
   render(<VehicleCard vehicle={v} isAdmin={isAdmin} busy={false} onPurchase={noop} onRestock={noop} onEdit={noop} onDelete={noop} {...handlers} />)
@@ -15,7 +15,7 @@ describe('VehicleCard', () => {
     expect(screen.getByText('Honda Civic')).toBeInTheDocument()
     expect(screen.getByText('Sedan')).toBeInTheDocument()
     expect(screen.getByText('$22,000')).toBeInTheDocument()
-    expect(screen.getByText('3 in stock')).toBeInTheDocument()
+    expect(screen.getByText('8 in stock')).toBeInTheDocument()
   })
 
   it('calls onPurchase when Purchase is clicked', async () => {

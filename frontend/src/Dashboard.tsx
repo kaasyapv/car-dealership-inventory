@@ -1,10 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import * as api from './api'
-import type { Filters, User, Vehicle, VehicleInput } from './types'
+import ActivityPanel from './ActivityPanel'
+import ConfirmDialog from './ConfirmDialog'
+import { DEFAULT_FILTERS, filtersFromSearch, filtersToSearch, SORTS } from './filters'
+import Toaster, { type Toast } from './Toaster'
+import type { Filters, SortKey, User, Vehicle, VehicleInput } from './types'
+import { useDebounced } from './useDebounced'
 import VehicleCard from './VehicleCard'
 import VehicleForm from './VehicleForm'
 
-const NO_FILTERS: Filters = { make: '', model: '', category: '', minPrice: '', maxPrice: '' }
+const SEARCH_DEBOUNCE_MS = 300
+const TOAST_MS = 4000
 const filterField =
   'rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200'
 
@@ -12,56 +18,107 @@ const replace = (list: Vehicle[], v: Vehicle) => list.map((x) => (x.id === v.id 
 
 export default function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
   const isAdmin = user.role === 'admin'
-  const [filters, setFilters] = useState(NO_FILTERS)
-  const [vehicles, setVehicles] = useState<Vehicle[] | null>(null)
-  const [error, setError] = useState('')
-  const [editing, setEditing] = useState<Vehicle | 'new' | null>(null)
+  const [filters, setFilters] = useState<Filters>(() => filtersFromSearch(window.location.search))
+  const query = useDebounced(filters, SEARCH_DEBOUNCE_MS)
 
-  // ponytail: refetch on every keystroke, add a debounce if the catalogue gets big
+  const [vehicles, setVehicles] = useState<Vehicle[] | null>(null) // null = first load in progress
+  const [total, setTotal] = useState(0)
+  const [loadError, setLoadError] = useState('')
+  const [attempt, setAttempt] = useState(0) // bump to retry the current search
+  const [busy, setBusy] = useState<Set<number>>(new Set())
+  const [editing, setEditing] = useState<Vehicle | 'new' | null>(null)
+  const [deleting, setDeleting] = useState<Vehicle | null>(null)
+  const [showActivity, setShowActivity] = useState(false)
+  const [toasts, setToasts] = useState<Toast[]>([])
+
+  const dismiss = (id: number) => setToasts((t) => t.filter((x) => x.id !== id))
+  const notify = (kind: Toast['kind'], message: string) => {
+    const id = Date.now() + Math.random()
+    setToasts((t) => [...t, { id, kind, message }])
+    setTimeout(() => dismiss(id), TOAST_MS)
+  }
+
+  // Keep the address bar shareable/refresh-proof without growing browser history on every keystroke.
   useEffect(() => {
-    let stale = false // ignore responses that arrive after a newer search started
+    window.history.replaceState(null, '', window.location.pathname + filtersToSearch(query))
+  }, [query])
+
+  useEffect(() => {
+    let stale = false // ignore a response that arrives after a newer search started
     api
-      .searchVehicles(filters)
-      .then((list) => !stale && (setVehicles(list), setError('')))
-      .catch((e: Error) => !stale && setError(e.message))
+      .searchVehicles(query, 0)
+      .then((page) => {
+        if (stale) return
+        setVehicles(page.items)
+        setTotal(page.total)
+        setLoadError('')
+      })
+      .catch((e: Error) => !stale && setLoadError(e.message))
     return () => {
       stale = true
     }
-  }, [filters])
+  }, [query, attempt])
 
-  /** Runs an API call, surfacing failures in the banner. */
-  const attempt = async (work: () => Promise<void>) => {
-    setError('')
+  const loadMore = async () => {
     try {
-      await work()
+      const page = await api.searchVehicles(query, vehicles?.length ?? 0)
+      setVehicles((list) => [...(list ?? []), ...page.items])
+      setTotal(page.total)
     } catch (e) {
-      setError((e as Error).message)
+      notify('error', (e as Error).message)
     }
   }
 
+  /** Runs one vehicle action: marks it busy (no double submits), toasts the outcome. */
+  const act = async (v: Vehicle, work: () => Promise<void>, done: string) => {
+    setBusy((s) => new Set(s).add(v.id))
+    try {
+      await work()
+      notify('success', done)
+    } catch (e) {
+      notify('error', (e as Error).message)
+    } finally {
+      setBusy((s) => {
+        const next = new Set(s)
+        next.delete(v.id)
+        return next
+      })
+    }
+  }
+
+  const name = (v: Vehicle) => `${v.make} ${v.model}`
   const update = (v: Vehicle) => setVehicles((list) => replace(list ?? [], v))
-  const purchase = (v: Vehicle) => attempt(async () => update(await api.purchase(v.id)))
-  const restock = (v: Vehicle) => attempt(async () => update(await api.restock(v.id, 5)))
-  const remove = (v: Vehicle) =>
-    window.confirm(`Delete ${v.make} ${v.model}?`) &&
-    attempt(async () => {
-      await api.deleteVehicle(v.id)
-      setVehicles((list) => list?.filter((x) => x.id !== v.id) ?? [])
-    })
+  const purchase = (v: Vehicle) => act(v, async () => update(await api.purchase(v.id)), `Purchased ${name(v)}`)
+  const restock = (v: Vehicle) => act(v, async () => update(await api.restock(v.id, 5)), `Restocked ${name(v)} (+5)`)
+  const confirmDelete = (v: Vehicle) => {
+    setDeleting(null)
+    return act(
+      v,
+      async () => {
+        await api.deleteVehicle(v.id)
+        setVehicles((list) => list?.filter((x) => x.id !== v.id) ?? [])
+        setTotal((n) => n - 1)
+      },
+      `Deleted ${name(v)}`,
+    )
+  }
 
   const save = async (input: VehicleInput) => {
     if (editing === 'new') {
       const created = await api.createVehicle(input)
       setVehicles((list) => [...(list ?? []), created])
+      setTotal((n) => n + 1)
     } else if (editing) {
       update(await api.updateVehicle(editing.id, input))
     }
+    notify('success', 'Saved')
     setEditing(null)
   }
 
-  const set = (key: keyof Filters) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const set = (key: Exclude<keyof Filters, 'available' | 'sort'>) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setFilters({ ...filters, [key]: e.target.value })
   const categories = [...new Set(vehicles?.map((v) => v.category))]
+  const closeEditor = useCallback(() => setEditing(null), [])
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -92,30 +149,76 @@ export default function Dashboard({ user, onLogout }: { user: User; onLogout: ()
           <datalist id="categories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
           <input aria-label="Minimum price" placeholder="Min $" type="number" min="0" value={filters.minPrice} onChange={set('minPrice')} className={`${filterField} w-28`} />
           <input aria-label="Maximum price" placeholder="Max $" type="number" min="0" value={filters.maxPrice} onChange={set('maxPrice')} className={`${filterField} w-28`} />
-          <button onClick={() => setFilters(NO_FILTERS)} className="text-sm font-medium text-slate-500 hover:text-slate-900">
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+            <input type="checkbox" checked={filters.available} onChange={(e) => setFilters({ ...filters, available: e.target.checked })} className="h-4 w-4 accent-indigo-600" />
+            In stock only
+          </label>
+          <select aria-label="Sort by" value={filters.sort} onChange={(e) => setFilters({ ...filters, sort: e.target.value as SortKey })} className={filterField}>
+            {Object.entries(SORTS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          </select>
+          <button onClick={() => setFilters(DEFAULT_FILTERS)} className="text-sm font-medium text-slate-500 hover:text-slate-900">
             Clear
           </button>
           {isAdmin && (
-            <button onClick={() => setEditing('new')} className="ml-auto rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
-              Add vehicle
-            </button>
+            <div className="ml-auto flex gap-2">
+              <button onClick={() => setShowActivity(true)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Activity
+              </button>
+              <button onClick={() => setEditing('new')} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+                Add vehicle
+              </button>
+            </div>
           )}
         </section>
 
-        {error && <p role="alert" className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-rose-700">{error}</p>}
+        {loadError && (
+          <div role="alert" className="mt-4 flex items-center justify-between rounded-xl bg-rose-50 px-4 py-3 text-rose-700">
+            <span>{loadError}</span>
+            <button onClick={() => setAttempt((n) => n + 1)} className="font-semibold underline">Try again</button>
+          </div>
+        )}
 
-        {vehicles?.length === 0 ? (
+        {vehicles === null ? (
+          !loadError && (
+            <div aria-label="Loading vehicles" aria-busy="true" className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {Array.from({ length: 8 }, (_, i) => (
+                <div key={i} className="h-80 animate-pulse rounded-2xl bg-white ring-1 ring-slate-200" />
+              ))}
+            </div>
+          )
+        ) : vehicles.length === 0 ? (
           <p className="mt-16 text-center text-slate-500">No vehicles match your search.</p>
         ) : (
-          <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {vehicles?.map((v) => (
-              <VehicleCard key={v.id} vehicle={v} isAdmin={isAdmin} onPurchase={purchase} onRestock={restock} onEdit={setEditing} onDelete={remove} />
-            ))}
-          </div>
+          <>
+            <p aria-live="polite" className="mt-5 text-sm text-slate-500">{`Showing ${vehicles.length} of ${total} vehicles`}</p>
+            <div className="mt-3 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {vehicles.map((v) => (
+                <VehicleCard key={v.id} vehicle={v} isAdmin={isAdmin} busy={busy.has(v.id)} onPurchase={purchase} onRestock={restock} onEdit={setEditing} onDelete={setDeleting} />
+              ))}
+            </div>
+            {vehicles.length < total && (
+              <div className="mt-8 text-center">
+                <button onClick={loadMore} className="rounded-xl bg-white px-6 py-3 font-semibold text-slate-800 shadow ring-1 ring-slate-200 hover:bg-slate-50">
+                  Load more
+                </button>
+              </div>
+            )}
+          </>
         )}
       </main>
 
-      {editing && <VehicleForm vehicle={editing === 'new' ? null : editing} onSave={save} onCancel={() => setEditing(null)} />}
+      {editing && <VehicleForm vehicle={editing === 'new' ? null : editing} onSave={save} onCancel={closeEditor} />}
+      {deleting && (
+        <ConfirmDialog
+          title={`Delete ${name(deleting)}?`}
+          message="This removes it from the catalogue. Its sales history is kept."
+          confirmLabel="Delete"
+          onConfirm={() => confirmDelete(deleting)}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
+      {showActivity && <ActivityPanel onClose={() => setShowActivity(false)} />}
+      <Toaster toasts={toasts} onDismiss={dismiss} />
     </div>
   )
 }
