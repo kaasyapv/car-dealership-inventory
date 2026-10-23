@@ -4,11 +4,16 @@ import { AuthService } from "../src/services/authService";
 import { FakeUserRepository } from "./fakes";
 
 /** Deterministic stand-ins for bcrypt/JWT so the service is tested in isolation. */
-const hasher = { hash: async (p: string) => `hashed:${p}`, compare: async (p: string, h: string) => h === `hashed:${p}` };
+let compares = 0;
+const hasher = {
+  hash: async (p: string) => `hashed:${p}`,
+  compare: async (p: string, h: string) => (compares++, h === `hashed:${p}`),
+};
 const tokens = { sign: (u: { id: number }) => `token-${u.id}`, verify: () => undefined };
 
 let service: AuthService;
 beforeEach(() => {
+  compares = 0;
   service = new AuthService(new FakeUserRepository(), hasher, tokens);
 });
 
@@ -40,5 +45,10 @@ describe("AuthService", () => {
     await service.register("a@x.com", "password123");
     expect(await codeOf(service.login("a@x.com", "wrong-password"))).toBe("INVALID_CREDENTIALS");
     expect(await codeOf(service.login("nobody@x.com", "password123"))).toBe("INVALID_CREDENTIALS");
+  });
+
+  it("does the same hashing work for an unknown email, so response time doesn't reveal which emails exist", async () => {
+    await codeOf(service.login("nobody@x.com", "password123"));
+    expect(compares).toBe(1);
   });
 });
