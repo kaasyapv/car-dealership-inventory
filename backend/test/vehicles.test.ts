@@ -36,6 +36,21 @@ describe("authentication", () => {
   });
 });
 
+describe("authorization: only admins may change the catalogue", () => {
+  it("forbids regular users from adding vehicles", async () => {
+    expect((await add(civic, user)).status).toBe(403);
+    expect((await request(app).get("/api/vehicles").set(bearer(admin))).body).toEqual([]);
+  });
+
+  it("forbids regular users from updating vehicles", async () => {
+    const { body } = await add(civic);
+    const res = await request(app).put(`/api/vehicles/${body.id}`).set(bearer(user)).send({ price: 1 });
+    expect(res.status).toBe(403);
+    const after = await request(app).get("/api/vehicles").set(bearer(admin));
+    expect(after.body[0].price).toBe(22000);
+  });
+});
+
 describe("POST /api/vehicles", () => {
   it("adds a vehicle with an id", async () => {
     const res = await add(civic);
