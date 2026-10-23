@@ -1,0 +1,25 @@
+
+ RUN  v5.0.5 /Users/kaasyap/Desktop/car-dealership-inventory/backend
+      Coverage enabled with v8
+
+
+ Test Files  2 passed (2)
+      Tests  48 passed (48)
+   Start at  21:59:28
+   Duration  9.27s (tests 95%, import 4%, transform 1%)
+
+ % Coverage report from v8
+-------------|---------|----------|---------|---------|-------------------
+File         | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------|---------|----------|---------|---------|-------------------
+All files    |   98.31 |    93.75 |     100 |   98.16 |                   
+ app.ts      |   85.71 |    83.33 |     100 |   85.71 | 30-31             
+ vehicles.ts |     100 |    92.85 |     100 |     100 | 69                
+-------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 98.31% ( 117/119 )
+Branches     : 93.75% ( 30/32 )
+Functions    : 100% ( 23/23 )
+Lines        : 98.16% ( 107/109 )
+================================================================================
