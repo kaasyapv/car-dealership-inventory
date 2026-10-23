@@ -11,6 +11,7 @@ const vehicleInput = z.object({
   price: z.number().min(0),
   quantity: z.number().int().min(0),
 });
+const purchaseInput = z.object({ quantity: z.number().int().positive().default(1) });
 const restockInput = z.object({ amount: z.number().int().positive() });
 const searchQuery = z.object({
   make: z.string().optional(),
@@ -48,11 +49,11 @@ export function vehicleRoutes(inventory: InventoryService): Router {
   });
 
   router.post("/:id/purchase", (req, res) => {
-    res.json(inventory.purchase(parseId(req.params.id)));
+    res.json(inventory.purchase(parseId(req.params.id), req.user!.id, purchaseInput.parse(req.body ?? {}).quantity));
   });
 
   router.post("/:id/restock", requireAdmin, (req, res) => {
-    res.json(inventory.restock(parseId(req.params.id), restockInput.parse(req.body).amount));
+    res.json(inventory.restock(parseId(req.params.id), req.user!.id, restockInput.parse(req.body).amount));
   });
 
   return router;

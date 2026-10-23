@@ -51,8 +51,37 @@ export interface VehicleRepository {
   insert(input: VehicleInput): Vehicle;
   update(id: number, input: VehicleInput): Vehicle | undefined;
   remove(id: number): boolean;
-  /** Atomically adds `delta` to stock. Returns undefined if the vehicle is missing or stock would go negative. */
-  adjustStock(id: number, delta: number): Vehicle | undefined;
+  /**
+   * Atomically changes stock and records the matching StockEvent, or does neither.
+   * Returns undefined if the vehicle is missing or stock would go negative.
+   */
+  adjustStock(change: StockChange): Vehicle | undefined;
+}
+
+export type StockEventKind = "purchase" | "restock";
+
+export interface StockChange {
+  vehicleId: number;
+  userId: number;
+  kind: StockEventKind;
+  /** Negative for purchases, positive for restocks. */
+  delta: number;
+}
+
+/** One line of the audit trail. `vehicle` is a name snapshot so history survives deleting the vehicle. */
+export interface StockEvent {
+  id: number;
+  vehicleId: number | null;
+  vehicle: string;
+  userEmail: string;
+  kind: StockEventKind;
+  quantity: number;
+  at: string;
+}
+
+/** Port: read side of the audit trail. */
+export interface StockLedger {
+  recent(limit: number): StockEvent[];
 }
 
 /** Port: persistence of users. */
