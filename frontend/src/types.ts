@@ -14,7 +14,8 @@ export interface Vehicle {
 }
 export type VehicleInput = Omit<Vehicle, 'id'>
 export interface Filters {
-  q: string
+  make: string
+  model: string
   category: string
   minPrice: string
   maxPrice: string
