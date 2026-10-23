@@ -2,8 +2,10 @@ import cors from "cors";
 import express from "express";
 import { rateLimit } from "express-rate-limit";
 import helmet from "helmet";
+import swaggerUi from "swagger-ui-express";
 import type { DatabaseSync } from "node:sqlite";
 import { DomainError } from "./domain";
+import { openApiSpec } from "./openapi";
 import { errorHandler } from "./http/errorHandler";
 import { authRoutes } from "./http/authRoutes";
 import { requireAdmin, requireAuth } from "./http/middleware";
@@ -32,6 +34,10 @@ export function createApp(db: DatabaseSync, { jwtSecret, bcryptRounds, corsOrigi
   const inventory = new InventoryService(vehicleRepo, vehicleRepo);
 
   const app = express();
+  // Swagger UI needs inline scripts that helmet's CSP blocks, so the docs are mounted ahead of it.
+  app.get("/api/openapi.json", (_req, res) => void res.json(openApiSpec));
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
+
   app.use(helmet(), cors({ origin: corsOrigin, exposedHeaders: ["X-Total-Count"] }), express.json());
 
   app.get("/api/health", (_req, res) => {

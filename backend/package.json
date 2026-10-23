@@ -8,7 +8,8 @@
     "start": "tsx src/server.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "build": "tsc --noEmit"
+    "seed": "tsx src/seed.ts",
+    "typecheck": "tsc --noEmit"
   },
   "author": "",
   "license": "ISC",
