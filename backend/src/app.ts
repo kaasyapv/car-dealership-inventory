@@ -22,6 +22,8 @@ export function createApp(db: DatabaseSync, { jwtSecret }: AppConfig) {
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ZodError) {
       res.status(400).json({ error: "Validation failed", details: err.issues });
+    } else if ((err as { type?: string }).type === "entity.parse.failed") {
+      res.status(400).json({ error: "Malformed JSON body" });
     } else if (err instanceof HttpError) {
       res.status(err.status).json({ error: err.message });
     } else {
