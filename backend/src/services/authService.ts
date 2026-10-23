@@ -35,8 +35,10 @@ export class AuthService {
 
   async login(email: string, password: string): Promise<Session> {
     const row = this.users.findByEmail(email);
-    // Same error for unknown email and wrong password: don't reveal which emails exist.
-    if (!row || !(await this.hasher.compare(password, row.passwordHash))) {
+    // Hash-compare even for unknown emails so response time doesn't reveal which emails exist,
+    // and return the same error for unknown email and wrong password.
+    const matches = await this.hasher.compare(password, row?.passwordHash ?? (await this.decoyHash()));
+    if (!row || !matches) {
       throw new DomainError("INVALID_CREDENTIALS", "Invalid email or password");
     }
     return this.sessionFor({ id: row.id, email: row.email, role: row.role });
@@ -45,6 +47,9 @@ export class AuthService {
   authenticate(token: string): User | undefined {
     return this.tokens.verify(token);
   }
+
+  private decoy?: Promise<string>;
+  private decoyHash = () => (this.decoy ??= this.hasher.hash("decoy-for-unknown-emails"));
 
   private sessionFor(user: User): Session {
     return { token: this.tokens.sign(user), user };
