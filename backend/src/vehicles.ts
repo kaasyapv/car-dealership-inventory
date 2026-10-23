@@ -70,7 +70,7 @@ export function vehicleRouter(db: DatabaseSync, secret: string): Router {
     res.json(db.prepare(`SELECT * FROM vehicles ${where} ORDER BY id`).all(...params));
   });
 
-  router.post("/", (req, res) => {
+  router.post("/", requireAdmin, (req, res) => {
     const v = vehicleInput.parse(req.body);
     const { lastInsertRowid } = db
       .prepare("INSERT INTO vehicles (make, model, category, price, quantity) VALUES (?, ?, ?, ?, ?)")
@@ -78,7 +78,7 @@ export function vehicleRouter(db: DatabaseSync, secret: string): Router {
     res.status(201).json(get(Number(lastInsertRowid)));
   });
 
-  router.put("/:id", (req, res) => {
+  router.put("/:id", requireAdmin, (req, res) => {
     const id = parseId(req.params.id);
     const current = get(id);
     const v = { ...current, ...vehicleUpdate.parse(req.body) };
