@@ -1,13 +1,12 @@
+import bcrypt from "bcryptjs";
 import type { DatabaseSync } from "node:sqlite";
-import { loadConfig } from "./config";
 import { openDb } from "./db";
-import { SqliteUserRepository } from "./repositories/sqliteUserRepository";
-import { SqliteVehicleRepository } from "./repositories/sqliteVehicleRepository";
-import { BcryptHasher } from "./security";
 
-/** Demo credentials: printed by the CLI and documented in the README. Never use these in production. */
-export const DEMO_PASSWORD = "password123";
-const DEMO_USERS = ["admin@showroom.dev", "shopper@showroom.dev"]; // first user created becomes admin
+const DEMO_PASSWORD = "password123";
+const DEMO_USERS = [
+  ["admin@showroom.dev", "admin"],
+  ["shopper@showroom.dev", "user"],
+];
 
 const DEMO_VEHICLES = [
   ["Honda", "Civic", "Sedan", 22000, 5],
@@ -28,24 +27,24 @@ const DEMO_VEHICLES = [
   ["Nissan", "Leaf", "Hatchback", 29000, 0],
 ] as const;
 
-/** Idempotent: only fills tables that are still empty. */
-export async function seedDemoData(db: DatabaseSync, bcryptRounds = 10) {
-  const empty = (table: string) => !db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get();
-  if (empty("users")) {
-    const users = new SqliteUserRepository(db);
-    const hasher = new BcryptHasher(bcryptRounds);
-    for (const email of DEMO_USERS) users.create(email, await hasher.hash(DEMO_PASSWORD));
+// SEED DATA: fills an empty database with demo users and cars (npm run seed)
+export function seedDemoData(db: DatabaseSync, bcryptRounds = 10) {
+  const isEmpty = (table: string) => !db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get();
+  if (isEmpty("users")) {
+    const hash = bcrypt.hashSync(DEMO_PASSWORD, bcryptRounds);
+    for (const [email, role] of DEMO_USERS) {
+      db.prepare("INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)").run(email, hash, role);
+    }
   }
-  if (empty("vehicles")) {
-    const vehicles = new SqliteVehicleRepository(db);
-    for (const [make, model, category, price, quantity] of DEMO_VEHICLES) {
-      vehicles.insert({ make, model, category, price, quantity });
+  if (isEmpty("vehicles")) {
+    for (const car of DEMO_VEHICLES) {
+      db.prepare("INSERT INTO vehicles (make, model, category, price, quantity) VALUES (?, ?, ?, ?, ?)").run(...car);
     }
   }
 }
 
 if (process.argv[1]?.endsWith("seed.ts")) {
-  const { dbPath } = loadConfig(process.env);
-  await seedDemoData(openDb(dbPath));
-  console.log(`Seeded ${dbPath}\n  admin:   ${DEMO_USERS[0]} / ${DEMO_PASSWORD}\n  shopper: ${DEMO_USERS[1]} / ${DEMO_PASSWORD}`);
+  const path = process.env.DB_PATH ?? "dealership.db";
+  seedDemoData(openDb(path));
+  console.log(`Seeded ${path}\n  admin:   admin@showroom.dev / ${DEMO_PASSWORD}\n  shopper: shopper@showroom.dev / ${DEMO_PASSWORD}`);
 }
