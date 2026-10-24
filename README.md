@@ -1,98 +1,92 @@
 # Showroom: Car Dealership Inventory System
 
-A full-stack inventory app for a car dealership, built test-first as a TDD kata. Customers browse, search and buy; admins manage the catalogue and see exactly who bought or restocked what.
+A full-stack inventory app for a car dealership, built test-first for a TDD kata. Customers browse, search and buy cars. Admins add, edit, delete and restock them.
 
-**Stack:** Node.js + TypeScript, Express 5, SQLite (file-backed), JWT, Zod · React 19 + TypeScript, Vite, Tailwind CSS v4 · Vitest, Supertest, Testing Library, Playwright.
+**Stack:** Node.js + TypeScript, Express, SQLite, JWT · React + TypeScript, Vite, Tailwind CSS · Vitest, Supertest, Testing Library, Playwright.
 
-| | |
+| Admin dashboard | Search |
 | --- | --- |
-| ![Admin dashboard](docs/screenshots/04-dashboard-admin.png) | ![Activity](docs/screenshots/06-activity.png) |
+| ![Admin dashboard](docs/screenshots/04-dashboard-admin.png) | ![Search](docs/screenshots/03-search.png) |
+
+More screenshots are in [docs/screenshots](docs/screenshots): [login](docs/screenshots/01-login.png), [shopper view](docs/screenshots/02-dashboard-user.png), [add vehicle form](docs/screenshots/04b-add-vehicle.png), [mobile](docs/screenshots/05-mobile.png).
 
 ## What the brief asked for, and where it lives
 
-| Requirement | Where / how |
+| Requirement | Where |
 | --- | --- |
-| Register + login, JWT-protected routes | `backend/src/services/authService.ts`, `http/middleware.ts` |
-| `POST/GET/PUT/DELETE /api/vehicles`, `GET /search` | `backend/src/http/vehicleRoutes.ts` |
-| `purchase` (decrease) and `restock` (increase, admin) | `services/inventoryService.ts`, atomic SQL in `repositories/sqliteVehicleRepository.ts` |
-| Admin-only: delete, restock, **and add/update** | The brief's UI section gives admins add/update/delete, so the API enforces it too (see "A bug I caught" below) |
-| Real database (not in-memory) | SQLite file via Node's built-in `node:sqlite` ([ADR 1](docs/adr/0001-sqlite-via-node-builtin.md)) |
-| React SPA, Tailwind, search/filter, disabled Purchase at 0, admin forms | `frontend/src/` |
-| Responsive and creative design | see screenshots; mobile layout included |
-| TDD with a visible Red → Green → Refactor history | see [TDD history](#tdd-history) |
-| SOLID, clean code | [ADR 2](docs/adr/0002-layers-and-ports.md) |
-| README, screenshots, test report, "My AI Usage", `PROMPTS.md` | here |
+| Register + login, JWT-protected routes | `backend/src/auth.ts` |
+| Vehicle CRUD and `GET /search` | `backend/src/vehicles.ts` |
+| `purchase` (decrease) and `restock` (increase, admin only) | `backend/src/vehicles.ts` |
+| Admin-only: add, update, delete, restock | `requireAdmin` in `backend/src/auth.ts` |
+| Real database (not in-memory) | SQLite file, schema in `backend/src/db.ts` |
+| React SPA with Tailwind, search/filter, Purchase disabled at 0 stock, admin forms | `frontend/src/` |
+| Responsive design | see the [mobile screenshot](docs/screenshots/05-mobile.png) |
 
-### Beyond the brief (deliberate extras)
+## How it is organised
 
-- **Audit trail.** Every purchase/restock is recorded in the same transaction as the stock change (who, what, how many, when). History survives deleting a vehicle. Admin "Activity" panel + `GET /api/inventory/events`.
-- **Never oversells.** One conditional `UPDATE … WHERE quantity + ? >= 0`; a test fires 20 simultaneous buyers at 5 cars ([ADR 4](docs/adr/0004-atomic-stock-and-audit-trail.md)).
-- **Search that scales.** Sort, in-stock filter, pagination (`limit`/`offset`, total in `X-Total-Count`), `LIKE` wildcards escaped, sort column from a closed enum.
-- **Filters live in the URL** (`/?category=SUV&available=1&sort=price:asc`): shareable, refresh-proof, debounced.
-- **Security hygiene.** bcrypt, startup-validated config, rate-limited auth, helmet, same error and same timing for unknown email vs wrong password ([ADR 5](docs/adr/0005-security-and-error-contract.md)).
-- **Living API docs.** OpenAPI at `/api/openapi.json`, Swagger UI at `/api/docs`; a contract test fails if a documented route doesn't exist.
-- **UX craft.** Loading skeletons, toasts (errors announced via `role="alert"`), in-app confirm dialog focused on *Cancel*, Escape closes modals, double-click-proof buttons, low-stock warnings, empty/error states with retry.
-- **Delivery.** `npm run seed`, GitHub Actions CI (typecheck + unit + coverage + Playwright), Dockerfiles + compose.
-
-## Architecture
-
-```mermaid
-flowchart LR
-  UI[React SPA] -->|JSON + Bearer JWT| HTTP
-  subgraph API [Express API]
-    HTTP[http/ validate + delegate] --> SVC[services/ business rules]
-    SVC -->|ports| REPO[repositories/ SQLite]
-  end
-  REPO --> DB[(SQLite file)]
-  SVC -.unit-tested with.-> FAKES[in-memory fakes]
+```
+backend/src
+  server.ts     starts the API
+  app.ts        middleware, routes and error handler wired together
+  db.ts         creates the two tables (users, vehicles)
+  auth.ts       register, login, token check, admin check
+  vehicles.ts   list/search, add, update, delete, purchase, restock
+  errors.ts     one error class and one error handler
+  seed.ts       demo data
+frontend/src
+  App.tsx           login page or dashboard
+  AuthForm.tsx      login/register form
+  Dashboard.tsx     search bar, vehicle grid, add/edit, messages
+  VehicleCard.tsx   one car, with the Purchase and admin buttons
+  VehicleForm.tsx   add/edit popup
+  api.ts            every call to the backend
 ```
 
-`domain.ts` holds the types, `DomainError` codes and the interfaces the services depend on; `app.ts` is the only place that picks concrete implementations. Six short [decision records](docs/adr/) explain the non-obvious choices.
+Purchase is one SQL statement, `UPDATE vehicles SET quantity = quantity - 1 WHERE id = ? AND quantity > 0`, so stock can never go below zero, even with simultaneous buyers. A test fires 20 buyers at 5 cars and expects exactly 5 successes.
 
 ## Run it
 
-Requires **Node 22.5+** (developed on Node 26) for the built-in `node:sqlite`.
+Requires **Node 22.5+** (it uses the built-in `node:sqlite`).
 
 ```bash
 npm run install:all          # backend, frontend and e2e dependencies
 
 # terminal 1: API on :4000 (creates dealership.db)
 npm run dev:api
-# optional demo data: 16 vehicles + admin@showroom.dev / shopper@showroom.dev (password123)
+# optional demo data: 16 cars + admin@showroom.dev / shopper@showroom.dev (password123)
 npm run seed
 
 # terminal 2: web on :5173 (proxies /api to :4000)
 npm run dev:web
 ```
 
-Open http://localhost:5173. **The first account you register becomes the admin** ([ADR 3](docs/adr/0003-first-user-is-admin.md)), or use the seeded `admin@showroom.dev`. API docs: http://localhost:4000/api/docs.
+Open http://localhost:5173. **The first account you register becomes the admin**, or use the seeded `admin@showroom.dev`.
 
-Backend env (all optional in dev): `PORT` (4000), `DB_PATH` (`dealership.db`), `CORS_ORIGIN` (`*`), `JWT_SECRET` (**required, 32+ chars, when `NODE_ENV=production`**).
+Backend environment variables (all optional in development): `PORT` (4000), `DB_PATH` (`dealership.db`), `CORS_ORIGIN` (`*`), `JWT_SECRET` (**required** when `NODE_ENV=production`).
 
-**Docker** (`docker-compose.yml` + two Dockerfiles): written but **not built or run by me**. The Docker daemon wasn't available on my machine, so treat it as untested.
+**Docker:** `docker-compose.yml` and two Dockerfiles are included but I could not build or run them (no Docker daemon on my machine), so they are untested.
 
 ## API
 
-All `/api/vehicles*` and `/api/inventory*` routes need `Authorization: Bearer <token>`. Errors are `{ "error": "...", "code": "OUT_OF_STOCK" }`. Full schema: Swagger UI.
+All `/api/vehicles*` routes need `Authorization: Bearer <token>`. Errors look like `{ "error": "...", "code": "OUT_OF_STOCK" }`.
 
 | Method | Route | Access | Notes |
 | --- | --- | --- | --- |
-| POST | `/api/auth/register` | public | `{email, password}` → `{token, user}`; `409` duplicate |
-| POST | `/api/auth/login` | public | identical `401` for unknown email / wrong password; `429` when rate limited |
-| GET | `/api/vehicles` · `/api/vehicles/search` | user | `make model category minPrice maxPrice available sort order limit offset` |
+| POST | `/api/auth/register` | public | `{email, password}` → `{token, user}`; `409` if the email exists |
+| POST | `/api/auth/login` | public | same `401` for unknown email and wrong password; `429` when rate limited |
+| GET | `/api/vehicles` · `/api/vehicles/search` | user | `make model category minPrice maxPrice available` |
 | POST | `/api/vehicles` | **admin** | `{make, model, category, price, quantity}` |
-| PUT | `/api/vehicles/:id` | **admin** | partial update |
-| DELETE | `/api/vehicles/:id` | **admin** | `204`; sales history is kept |
-| POST | `/api/vehicles/:id/purchase` | user | optional `{quantity}` (default 1); `409 OUT_OF_STOCK` |
+| PUT | `/api/vehicles/:id` | **admin** | only the fields you send change |
+| DELETE | `/api/vehicles/:id` | **admin** | `204` |
+| POST | `/api/vehicles/:id/purchase` | user | `409` when out of stock |
 | POST | `/api/vehicles/:id/restock` | **admin** | `{amount}` |
-| GET | `/api/inventory/events` | **admin** | audit trail, newest first |
-| GET | `/api/health` | public | liveness + DB check |
+| GET | `/api/health` | public | liveness and database check |
 
 ## Tests
 
 ```bash
-npm test            # backend + frontend unit/integration
-npm run test:e2e    # Playwright in real Chrome against the real API and a throwaway DB
+npm test            # backend + frontend
+npm run test:e2e    # Playwright in real Chrome against the real API and a throwaway database
 npm run test:all    # typecheck + everything
 ```
 
@@ -100,52 +94,42 @@ npm run test:all    # typecheck + everything
 
 | Suite | Tests | Statements | Branches | Functions | Lines |
 | --- | --- | --- | --- | --- | --- |
-| Backend: service units + API (Supertest, real SQLite) | **113** ✅ | 95.1% | 90.3% | 100% | 95.5% |
-| Frontend: components + client (Testing Library) | **45** ✅ | 93.9% | 89.6% | 86.8% | 96.3% |
-| End-to-end (Playwright, Chrome) | **5** ✅ | n/a | n/a | n/a | n/a |
+| Backend (Supertest, real SQLite) | **59** passing | 96.4% | 91.7% | 100% | 95.9% |
+| Frontend (Testing Library) | **32** passing | 93.4% | 92.2% | 84.9% | 97.6% |
+| End-to-end (Playwright, Chrome) | **5** passing | n/a | n/a | n/a | n/a |
 
-Raw output: [backend](docs/test-report-backend.txt) · [frontend](docs/test-report-frontend.txt) · [e2e](docs/test-report-e2e.txt). The uncovered lines are mostly defensive branches (toast dismiss, load-more failure, the seed CLI guard). API tests use an isolated in-memory SQLite per test for speed; the running app always uses a file.
+Raw output: [backend](docs/test-report-backend.txt) · [frontend](docs/test-report-frontend.txt) · [e2e](docs/test-report-e2e.txt). The backend API tests use an in-memory SQLite database per test for speed; the running app always uses a file. CI runs everything on every push (`.github/workflows/ci.yml`).
 
 ### TDD history
 
-Each `test(red)` commit adds specs that I ran and watched fail; the next commit makes them pass; `refactor` changes structure with the suite untouched.
+Each `test(red)` commit adds tests that failed when I ran them. The next commit makes them pass. `git log --oneline` shows the real order.
 
-```
-test(red):  auth register/login               → feat: JWT auth + SQLite (green)
-test(red):  vehicle CRUD, search, purchase    → feat: vehicle routes (green)
-test(red):  malformed JSON is a 400           → fix: map to 400 (green)
-test(red):  only admins add/update vehicles   → fix: require admin (green)        ← bug found in review
-test(red):  service-level specs + fakes       → refactor: layers and ports        ← the Refactor step
-test(red):  multi-unit buy, concurrency, audit→ feat: transactional audit trail (green)
-test(red):  availability, sort, pagination    → feat: listing features (green)
-test(red):  config, health, headers, limits   → feat: hardening (green)
-test(red):  OpenAPI contract, seed            → feat: docs + seed (green)
-test(red):  frontend UX specs                 → feat: debounce, URL filters, toasts… (green)
-```
+The history also shows something I did on purpose: I first built extras (audit trail, pagination, sorting, OpenAPI docs, URL-synced filters), then removed them in the two `refactor` commits at the end, because they were more than the brief needed and made the code harder to explain. The required behaviour and its tests did not change.
 
-(`git log --oneline` shows the real sequence.)
+## What I did not build
 
-## Things I deliberately did not build
-
-Refresh tokens/revocation, password reset, a promote-to-admin screen, an ORM, GraphQL, a DI container, caching, a Redis-backed rate limiter, optimistic UI updates, payments. Each is a real feature for a real product; none earns its complexity in this scope, and the ADRs say where each would plug in.
+Refresh tokens, password reset, a screen to promote users to admin, pagination and sorting, payments, an ORM. None are in the brief.
 
 ## My AI Usage
 
-**Tool:** Claude Code (Anthropic's CLI agent, Claude Sonnet 5.5). Every AI-assisted commit has a `Co-Authored-By` trailer. The full prompts are in [PROMPTS.md](PROMPTS.md).
+**Tool:** Claude Code (Anthropic's CLI agent, Claude Sonnet 5.5). The prompts are in [PROMPTS.md](PROMPTS.md). These commits do not carry a `Co-authored-by` trailer, so this section is where AI use is recorded.
 
-**How I used it**
+**Where AI was used**
 
-- **Test-first pairing.** I used it to enumerate edge cases (negative stock, SQL wildcard input, refused purchases not being logged, history surviving deletes), wrote them as failing specs first, and only then let it implement. A failing run was the gate before every implementation.
-- **Design decisions were mine; typing was shared.** I chose the port boundaries, first-user-is-admin, the audit-trail model and what *not* to build. AI did the mechanical moves (the refactor into layers) and drafted components and Tailwind markup.
-- **AI as a skeptical reviewer.** After the first working version I asked it to critique the UI like a senior reviewer; the list (no loading state, `window.confirm`, a request per keystroke, filters lost on refresh, double-click buys twice) became the frontend specs.
-- **Tooling.** Scaffolding configs, Playwright setup, and a headless-Chrome script for the screenshots.
+| Area | What the AI did |
+| --- | --- |
+| Backend API (`auth.ts`, `vehicles.ts`, `db.ts`) | Wrote the Express routes and SQL, test-first |
+| Backend tests | Listed edge cases (negative stock, admin-only routes, invalid input, concurrent buyers) and wrote them as failing tests before the code |
+| Frontend components and Tailwind styling | Wrote the React components and the visual design |
+| Frontend tests | Wrote the Testing Library tests and the Playwright journeys |
+| Screenshots, CI workflow, Dockerfiles | Wrote them; the Dockerfiles were never run |
+| Refactoring | Split the code into layers, then, when I asked for simpler code, flattened it again |
 
-**Where it was wrong, and how I caught it** (all real, all in the history)
+**Mistakes the AI made, found during review**
 
-1. The first generated router let *any* logged-in user add and edit vehicles, so a shopper could reprice a car. Only delete/restock were admin-gated, because those were the only ones the brief labelled "Admin only". Re-reading the brief's UI section showed add/update are admin features too. I wrote the failing test first, then fixed it.
-2. It put a feature implementation into a commit labelled as a red test. I rewrote the local history so the red/green sequence is honest.
-3. One of its UI specs asserted two contradictory low-stock thresholds. I noticed when the green run failed and fixed the spec, not the code.
-4. The first end-to-end run failed on ambiguous button names ("Register" also matched "Already registered? Log in"). That's a real accessibility smell, so I made the selectors exact.
-5. It wrote Docker files I could not run. I say so above instead of claiming they work.
-
-**Reflection.** AI was strongest at breadth: edge-case lists, boilerplate, mechanical refactors, and a second pair of eyes. It was weakest at reading intent: it implemented what the brief literally labelled rather than what it implied (the admin gap), and it happily produced plausible-looking structure with no one asking "does this have to exist?". The workflow that worked was tests as the contract, small commits, and treating every generated diff as a pull request from a fast junior: read it, run it, and distrust the confident parts. The red/green discipline also made AI's mistakes cheap to find, because a wrong assumption shows up as a failing test rather than a production bug.
+1. The first router let any logged-in user add and edit vehicles. The brief only labelled delete and restock as "Admin only", but its UI section gives admins add and update too. A failing test came first, then the fix.
+2. A commit labelled as a red test also contained the implementation. The local history was rewritten so red and green are separate.
+3. One generated UI test asserted two different low-stock thresholds.
+4. The first end-to-end run failed on button names that matched twice ("Register" and "Already registered? Log in").
+5. It over-built: audit trail, pagination, sorting, OpenAPI. I asked for simpler code I could explain, so those were removed.
+6. It wrote Docker files it could not run.

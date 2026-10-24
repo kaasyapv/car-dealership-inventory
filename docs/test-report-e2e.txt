@@ -1,10 +1,11 @@
-
+> test:e2e
+> npm test --prefix e2e
+> dealership-e2e@1.0.0 test
+> playwright test
 Running 5 tests using 1 worker
-
-  ✓  1 tests/dealership.spec.ts:25:7 › dealership journey › the first account is the admin and can add vehicles (1.3s)
-  ✓  2 tests/dealership.spec.ts:45:7 › dealership journey › a shopper cannot see admin tools, can search, and buying the last car sells it out (2.6s)
-  ✓  3 tests/dealership.spec.ts:65:7 › dealership journey › the admin sees the sale in the audit trail and can restock and delete (998ms)
-  ✓  4 tests/dealership.spec.ts:81:7 › dealership journey › sessions survive a reload and logging out returns to the login form (932ms)
-  ✓  5 tests/dealership.spec.ts:89:7 › dealership journey › wrong credentials show an error and a bad API route is never reachable without a token (942ms)
-
-  5 passed (9.7s)
+  ✓  1 tests/dealership.spec.ts:25:7 › dealership journey › the first account is the admin and can add vehicles (1.6s)
+  ✓  2 tests/dealership.spec.ts:45:7 › dealership journey › a shopper cannot see admin tools, can search, and buying the last car sells it out (1.2s)
+  ✓  3 tests/dealership.spec.ts:64:7 › dealership journey › the admin sees the sale and can restock and delete (928ms)
+  ✓  4 tests/dealership.spec.ts:76:7 › dealership journey › sessions survive a reload and logging out returns to the login form (1.1s)
+  ✓  5 tests/dealership.spec.ts:84:7 › dealership journey › wrong credentials show an error and a bad API route is never reachable without a token (701ms)
+  5 passed (8.5s)
