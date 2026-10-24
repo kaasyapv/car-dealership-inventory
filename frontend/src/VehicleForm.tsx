@@ -1,16 +1,15 @@
 import { useState } from 'react'
-import Modal from './Modal'
 import type { Vehicle, VehicleInput } from './types'
 
-interface Props {
-  vehicle: Vehicle | null // null = adding a new vehicle
+type Props = {
+  vehicle: Vehicle | null // null means a new vehicle
   onSave: (input: VehicleInput) => Promise<void>
   onCancel: () => void
 }
 
 const field = 'mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200'
 
-/** Modal form used by admins to add or edit a vehicle. */
+// ADD / EDIT FORM (admin): the popup used for both adding and editing a vehicle
 export default function VehicleForm({ vehicle, onSave, onCancel }: Props) {
   const [values, setValues] = useState({
     make: vehicle?.make ?? '',
@@ -33,8 +32,13 @@ export default function VehicleForm({ vehicle, onSave, onCancel }: Props) {
   }
 
   return (
-    <Modal label={vehicle ? 'Edit vehicle' : 'Add vehicle'} onClose={onCancel}>
-      <form onSubmit={submit} className="space-y-4 p-7">
+    <div className="fixed inset-0 z-20 grid place-items-center bg-slate-950/60 p-4">
+      <form
+        onSubmit={submit}
+        role="dialog"
+        aria-label={vehicle ? 'Edit vehicle' : 'Add vehicle'}
+        className="max-h-[90vh] w-full max-w-md space-y-4 overflow-y-auto rounded-3xl bg-white p-7 shadow-2xl"
+      >
         <h2 className="text-xl font-bold text-slate-900">{vehicle ? 'Edit vehicle' : 'Add a vehicle'}</h2>
         <div className="grid grid-cols-2 gap-4">
           <label className="text-sm font-medium text-slate-700">
@@ -68,6 +72,6 @@ export default function VehicleForm({ vehicle, onSave, onCancel }: Props) {
           <button className="rounded-xl bg-indigo-600 px-5 py-2 font-semibold text-white hover:bg-indigo-700">Save</button>
         </div>
       </form>
-    </Modal>
+    </div>
   )
 }

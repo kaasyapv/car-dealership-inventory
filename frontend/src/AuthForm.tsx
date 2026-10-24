@@ -1,13 +1,11 @@
 import { useState } from 'react'
 
-export type AuthMode = 'login' | 'register'
-
 const field =
   'mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200'
 
-/** Login/register form; the parent decides what a successful submit does. */
-export default function AuthForm({ onSubmit }: { onSubmit: (mode: AuthMode, email: string, password: string) => Promise<void> }) {
-  const [mode, setMode] = useState<AuthMode>('login')
+// LOGIN AND REGISTER FORM: one form, a link switches between the two modes
+export default function AuthForm({ onSubmit }: { onSubmit: (mode: 'login' | 'register', email: string, password: string) => Promise<void> }) {
+  const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')

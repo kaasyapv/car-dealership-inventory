@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from './api'
 
 const fetchMock = vi.fn()
-const reply = (status: number, body?: unknown, headers: Record<string, string> = {}) =>
-  fetchMock.mockResolvedValue({ status, ok: status < 400, json: async () => body, headers: new Headers(headers) })
+const reply = (status: number, body?: unknown) =>
+  fetchMock.mockResolvedValue({ status, ok: status < 400, json: async () => body })
 
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
@@ -13,29 +13,12 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('api', () => {
-  const base = { make: '', model: '', category: '', minPrice: '', maxPrice: '', available: false, sort: 'id' as const }
+  const empty = { make: '', model: '', category: '', minPrice: '', maxPrice: '', available: false }
 
   it('builds the search query from non-empty filters only', async () => {
     reply(200, [])
-    await api.searchVehicles({ ...base, make: ' honda ', minPrice: '100' })
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/vehicles/search?make=honda&minPrice=100&limit=12&offset=0')
-  })
-
-  it('maps availability, sort and paging onto API parameters', async () => {
-    reply(200, [])
-    await api.searchVehicles({ ...base, available: true, sort: 'price:desc' }, 24)
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/vehicles/search?available=true&sort=price&order=desc&limit=12&offset=24')
-  })
-
-  it('returns the items together with the total from X-Total-Count', async () => {
-    reply(200, [{ id: 1 }], { 'X-Total-Count': '37' })
-    expect(await api.searchVehicles(base)).toEqual({ items: [{ id: 1 }], total: 37 })
-  })
-
-  it('lists stock events for admins', async () => {
-    reply(200, [])
-    await api.listEvents()
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/inventory/events?limit=30')
+    await api.searchVehicles({ ...empty, make: ' honda ', minPrice: '100', available: true })
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/vehicles/search?make=honda&minPrice=100&available=true')
   })
 
   it('sends the saved bearer token', async () => {

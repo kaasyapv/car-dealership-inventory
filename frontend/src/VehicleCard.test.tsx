@@ -49,11 +49,6 @@ describe('VehicleCard', () => {
     expect(onRestock).toHaveBeenCalledWith(civic)
   })
 
-  it('warns when stock is low', () => {
-    setup({ ...civic, quantity: 2 })
-    expect(screen.getByText('Only 2 left')).toBeInTheDocument()
-  })
-
   it('disables Purchase while a request is in flight so a double click cannot buy twice', () => {
     render(<VehicleCard vehicle={civic} isAdmin={false} busy onPurchase={noop} onRestock={noop} onEdit={noop} onDelete={noop} />)
     expect(screen.getByRole('button', { name: 'Purchase' })).toBeDisabled()

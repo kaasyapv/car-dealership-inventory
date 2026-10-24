@@ -10,7 +10,7 @@ const session = { token: 't', user: { id: 1, email: 'a@x.com', role: 'user' as c
 
 beforeEach(() => {
   vi.resetAllMocks()
-  vi.mocked(api.searchVehicles).mockResolvedValue({ items: [], total: 0 })
+  vi.mocked(api.searchVehicles).mockResolvedValue([])
 })
 
 describe('App', () => {

@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import * as api from './api'
-import AuthForm, { type AuthMode } from './AuthForm'
+import AuthForm from './AuthForm'
 import Dashboard from './Dashboard'
 
+// APP: shows the login page, or the dashboard once logged in
 export default function App() {
   const [session, setSession] = useState(api.loadSession)
 
-  const authenticate = async (mode: AuthMode, email: string, password: string) => {
-    const next = await (mode === 'login' ? api.login : api.register)(email, password)
+  const authenticate = async (mode: 'login' | 'register', email: string, password: string) => {
+    const next = mode === 'login' ? await api.login(email, password) : await api.register(email, password)
     api.saveSession(next)
     setSession(next)
   }
+
   const logout = () => {
     api.clearSession()
     setSession(null)
