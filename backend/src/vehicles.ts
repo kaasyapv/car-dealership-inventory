@@ -40,12 +40,29 @@ export function vehicleRoutes(db: DatabaseSync) {
     const q = searchSchema.parse(req.query);
     const conditions: string[] = [];
     const values: (string | number)[] = [];
-    if (q.make) (conditions.push("make LIKE ?"), values.push(`%${q.make}%`));
-    if (q.model) (conditions.push("model LIKE ?"), values.push(`%${q.model}%`));
-    if (q.category) (conditions.push("category LIKE ?"), values.push(`%${q.category}%`));
-    if (q.minPrice !== undefined) (conditions.push("price >= ?"), values.push(q.minPrice));
-    if (q.maxPrice !== undefined) (conditions.push("price <= ?"), values.push(q.maxPrice));
-    if (q.available === "true") conditions.push("quantity > 0");
+    if (q.make) {
+      conditions.push("make LIKE ?");
+      values.push(`%${q.make}%`);
+    }
+    if (q.model) {
+      conditions.push("model LIKE ?");
+      values.push(`%${q.model}%`);
+    }
+    if (q.category) {
+      conditions.push("category LIKE ?");
+      values.push(`%${q.category}%`);
+    }
+    if (q.minPrice !== undefined) {
+      conditions.push("price >= ?");
+      values.push(q.minPrice);
+    }
+    if (q.maxPrice !== undefined) {
+      conditions.push("price <= ?");
+      values.push(q.maxPrice);
+    }
+    if (q.available === "true") {
+      conditions.push("quantity > 0");
+    }
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     res.json(db.prepare(`SELECT * FROM vehicles ${where} ORDER BY id`).all(...values));
   });

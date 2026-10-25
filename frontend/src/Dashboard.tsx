@@ -67,9 +67,6 @@ export default function Dashboard({ user, onLogout }: { user: User; onLogout: ()
     await load(filters)
   }
 
-  const setField = (key: keyof Omit<Filters, 'available'>) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setFilters({ ...filters, [key]: e.target.value })
-
   return (
     <div className="min-h-screen bg-slate-100">
       {/* HEADER: title, who is logged in, log out */}
@@ -102,11 +99,11 @@ export default function Dashboard({ user, onLogout }: { user: User; onLogout: ()
           }}
           className="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-4 shadow-lg ring-1 ring-slate-200"
         >
-          <input aria-label="Filter by make" placeholder="Make" value={filters.make} onChange={setField('make')} className={inputStyle} />
-          <input aria-label="Filter by model" placeholder="Model" value={filters.model} onChange={setField('model')} className={inputStyle} />
-          <input aria-label="Filter by category" placeholder="Category" value={filters.category} onChange={setField('category')} className={inputStyle} />
-          <input aria-label="Minimum price" placeholder="Min $" type="number" min="0" value={filters.minPrice} onChange={setField('minPrice')} className={`${inputStyle} w-28`} />
-          <input aria-label="Maximum price" placeholder="Max $" type="number" min="0" value={filters.maxPrice} onChange={setField('maxPrice')} className={`${inputStyle} w-28`} />
+          <input aria-label="Filter by make" placeholder="Make" value={filters.make} onChange={(e) => setFilters({ ...filters, make: e.target.value })} className={inputStyle} />
+          <input aria-label="Filter by model" placeholder="Model" value={filters.model} onChange={(e) => setFilters({ ...filters, model: e.target.value })} className={inputStyle} />
+          <input aria-label="Filter by category" placeholder="Category" value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} className={inputStyle} />
+          <input aria-label="Minimum price" placeholder="Min $" type="number" min="0" value={filters.minPrice} onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })} className={`${inputStyle} w-28`} />
+          <input aria-label="Maximum price" placeholder="Max $" type="number" min="0" value={filters.maxPrice} onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })} className={`${inputStyle} w-28`} />
           <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
             <input type="checkbox" checked={filters.available} onChange={(e) => setFilters({ ...filters, available: e.target.checked })} className="h-4 w-4 accent-indigo-600" />
             In stock only

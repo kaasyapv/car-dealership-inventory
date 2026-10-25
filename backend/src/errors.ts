@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 
-// ERRORS: throw ApiError anywhere; errorHandler turns it into a JSON response
+// ERRORS: throw ApiError anywhere and errorHandler turns it into a JSON response
 export class ApiError extends Error {
   constructor(
     public status: number,

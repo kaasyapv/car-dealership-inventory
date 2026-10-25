@@ -19,8 +19,6 @@ export default function VehicleForm({ vehicle, onSave, onCancel }: Props) {
     quantity: vehicle?.quantity.toString() ?? '',
   })
   const [error, setError] = useState('')
-  const set = (key: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setValues({ ...values, [key]: e.target.value })
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,25 +41,25 @@ export default function VehicleForm({ vehicle, onSave, onCancel }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <label className="text-sm font-medium text-slate-700">
             Make
-            <input autoFocus required value={values.make} onChange={set('make')} className={field} />
+            <input autoFocus required value={values.make} onChange={(e) => setValues({ ...values, make: e.target.value })} className={field} />
           </label>
           <label className="text-sm font-medium text-slate-700">
             Model
-            <input required value={values.model} onChange={set('model')} className={field} />
+            <input required value={values.model} onChange={(e) => setValues({ ...values, model: e.target.value })} className={field} />
           </label>
         </div>
         <label className="block text-sm font-medium text-slate-700">
           Category
-          <input required value={values.category} onChange={set('category')} className={field} />
+          <input required value={values.category} onChange={(e) => setValues({ ...values, category: e.target.value })} className={field} />
         </label>
         <div className="grid grid-cols-2 gap-4">
           <label className="text-sm font-medium text-slate-700">
             Price
-            <input required type="number" min="0" step="any" value={values.price} onChange={set('price')} className={field} />
+            <input required type="number" min="0" step="any" value={values.price} onChange={(e) => setValues({ ...values, price: e.target.value })} className={field} />
           </label>
           <label className="text-sm font-medium text-slate-700">
             Quantity
-            <input required type="number" min="0" step="1" value={values.quantity} onChange={set('quantity')} className={field} />
+            <input required type="number" min="0" step="1" value={values.quantity} onChange={(e) => setValues({ ...values, quantity: e.target.value })} className={field} />
           </label>
         </div>
         {error && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}

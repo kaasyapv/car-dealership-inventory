@@ -5,7 +5,7 @@ import Dashboard from './Dashboard'
 
 // APP: shows the login page, or the dashboard once logged in
 export default function App() {
-  const [session, setSession] = useState(api.loadSession)
+  const [session, setSession] = useState(api.loadSession())
 
   const authenticate = async (mode: 'login' | 'register', email: string, password: string) => {
     const next = mode === 'login' ? await api.login(email, password) : await api.register(email, password)
